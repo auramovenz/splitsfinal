@@ -280,12 +280,24 @@ export default function SwimSplitCalc() {
   const [customFront, setCustomFront] = useState("");
   const [customBack, setCustomBack]   = useState("");
   const [useCustom, setUseCustom]     = useState(false);
+  const [inputMode, setInputMode]     = useState("time"); // "time" | "pace"
+  const [paceInput, setPaceInput]     = useState("");
 
   const event   = ALL_EVENTS.find(e => e.label === eventKey) || ALL_EVENTS[2];
   const profile = PROFILES.find(p => p.key === profileKey) || PROFILES[1];
   const theme   = STROKE_THEME[event.stroke] || STROKE_THEME.FR;
+  const isOW    = event.stroke === "OW";
 
-  const totalSecs = parseTime(timeInput);
+  // Derive totalSecs from whichever input mode is active
+  const paceSecs = parseTime(paceInput);
+  const paceTotal = (paceSecs != null && paceSecs > 0)
+    ? (paceSecs / 100) * event.dist
+    : null;
+
+  const rawTimeSecs = parseTime(timeInput);
+  const totalSecs = (inputMode === "pace" && isOW)
+    ? paceTotal
+    : rawTimeSecs;
   const valid = totalSecs != null && totalSecs > 0;
 
   const splits = (() => {
@@ -348,7 +360,11 @@ export default function SwimSplitCalc() {
             <div style={{ position: "relative" }}>
               <select
                 value={eventKey}
-                onChange={e => setEventKey(e.target.value)}
+                onChange={e => {
+                  const newEvent = ALL_EVENTS.find(ev => ev.label === e.target.value);
+                  if (newEvent && newEvent.stroke !== "OW") setInputMode("time");
+                  setEventKey(e.target.value);
+                }}
                 style={{
                   width: "100%", padding: "11px 36px 11px 14px",
                   borderRadius: 9, fontSize: 14, fontWeight: 700,
@@ -390,34 +406,99 @@ export default function SwimSplitCalc() {
             </div>
           </div>
 
-          {/* TIME INPUT */}
+          {/* TIME / PACE INPUT */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{
-              display: "block", fontSize: 10, fontWeight: 800,
-              color: "#8B9AAB", letterSpacing: 1.2, marginBottom: 6,
-            }}>
-              TARGET TIME &nbsp;
-              <span style={{ fontWeight: 400, fontSize: 10 }}>
-                e.g. 58.90 &nbsp;·&nbsp; 1:58.45 &nbsp;·&nbsp; 16:24.00
-              </span>
-            </label>
-            <input
-              value={timeInput}
-              onChange={e => { setTimeInput(e.target.value); setUseCustom(false); }}
-              placeholder="1:58.45"
-              style={{
-                width: "100%", padding: "12px 14px", borderRadius: 9,
-                fontSize: 24, fontWeight: 900, fontFamily: "monospace", letterSpacing: 2,
-                border: `2.5px solid ${valid ? theme.accent : "#D0DAE0"}`,
-                background: valid ? theme.light : "#FAFBFC",
-                color: "#0A2540", outline: "none", boxSizing: "border-box",
-                transition: "all 0.2s",
-              }}
-            />
-            {timeInput && !valid && (
-              <div style={{ color: "#D5508A", fontSize: 11, marginTop: 4 }}>
-                Cannot read that time - try <b>58.90</b> or <b>1:58.45</b> or <b>16:24.00</b>
+
+            {/* Mode toggle - only shown for OW events */}
+            {isOW && (
+              <div style={{ display: "flex", gap: 0, marginBottom: 8, borderRadius: 8, overflow: "hidden", border: `1.5px solid ${theme.border}`, width: "fit-content" }}>
+                {[["time", "Finish Time"], ["pace", "Pace / 100m"]].map(([mode, label]) => {
+                  const active = inputMode === mode;
+                  return (
+                    <button key={mode} onClick={() => setInputMode(mode)} style={{
+                      padding: "5px 14px", fontSize: 11, fontWeight: 700,
+                      background: active ? theme.accent : "white",
+                      color: active ? "white" : "#8B9AAB",
+                      border: "none", cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}>{label}</button>
+                  );
+                })}
               </div>
+            )}
+
+            {/* Pace input (OW + pace mode) */}
+            {isOW && inputMode === "pace" ? (
+              <>
+                <label style={{
+                  display: "block", fontSize: 10, fontWeight: 800,
+                  color: "#8B9AAB", letterSpacing: 1.2, marginBottom: 6,
+                }}>
+                  PACE PER 100m &nbsp;
+                  <span style={{ fontWeight: 400, fontSize: 10 }}>
+                    e.g. 1:45.00 &nbsp;·&nbsp; 2:10.00
+                  </span>
+                </label>
+                <input
+                  value={paceInput}
+                  onChange={e => { setPaceInput(e.target.value); setUseCustom(false); }}
+                  placeholder="2:00.00"
+                  style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 9,
+                    fontSize: 24, fontWeight: 900, fontFamily: "monospace", letterSpacing: 2,
+                    border: `2.5px solid ${(paceSecs != null && paceSecs > 0) ? theme.accent : "#D0DAE0"}`,
+                    background: (paceSecs != null && paceSecs > 0) ? theme.light : "#FAFBFC",
+                    color: "#0A2540", outline: "none", boxSizing: "border-box",
+                    transition: "all 0.2s",
+                  }}
+                />
+                {paceInput && !(paceSecs != null && paceSecs > 0) && (
+                  <div style={{ color: "#D5508A", fontSize: 11, marginTop: 4 }}>
+                    Cannot read that pace - try <b>1:45.00</b> or <b>2:10.00</b>
+                  </div>
+                )}
+                {valid && (
+                  <div style={{ fontSize: 11, color: theme.accent, fontWeight: 700, marginTop: 6 }}>
+                    → Projected finish time: <span style={{ fontFamily: "monospace" }}>{formatTime(totalSecs, true)}</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <label style={{
+                  display: "block", fontSize: 10, fontWeight: 800,
+                  color: "#8B9AAB", letterSpacing: 1.2, marginBottom: 6,
+                }}>
+                  TARGET TIME &nbsp;
+                  <span style={{ fontWeight: 400, fontSize: 10 }}>
+                    e.g. 58.90 &nbsp;·&nbsp; 1:58.45 &nbsp;·&nbsp; 16:24.00
+                  </span>
+                </label>
+                <input
+                  value={timeInput}
+                  onChange={e => { setTimeInput(e.target.value); setUseCustom(false); }}
+                  placeholder="1:58.45"
+                  style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 9,
+                    fontSize: 24, fontWeight: 900, fontFamily: "monospace", letterSpacing: 2,
+                    border: `2.5px solid ${valid ? theme.accent : "#D0DAE0"}`,
+                    background: valid ? theme.light : "#FAFBFC",
+                    color: "#0A2540", outline: "none", boxSizing: "border-box",
+                    transition: "all 0.2s",
+                  }}
+                />
+                {timeInput && !valid && (
+                  <div style={{ color: "#D5508A", fontSize: 11, marginTop: 4 }}>
+                    Cannot read that time - try <b>58.90</b> or <b>1:58.45</b> or <b>16:24.00</b>
+                  </div>
+                )}
+                {/* For OW + time mode, show the derived pace */}
+                {isOW && valid && (
+                  <div style={{ fontSize: 11, color: theme.accent, fontWeight: 700, marginTop: 6 }}>
+                    → Pace per 100m: <span style={{ fontFamily: "monospace" }}>{formatTime((totalSecs / event.dist) * 100, true)}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
